@@ -1,0 +1,67 @@
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   obj:/usr/lib/libcuda.so*
+   obj:/usr/lib/libcuda.so*
+   fun:__cudart525
+   fun:__cudart1354
+   fun:__pthread_once_slow
+   fun:__cudart1635
+   fun:__cudart523
+   fun:cudaMallocManaged
+   fun:_Z17cudaMallocManagedIP6vqint3E9cudaErrorPPT_mj
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   obj:/usr/lib/libcuda.so*
+   obj:/usr/lib/libcuda.so*
+   obj:/usr/lib/libcuda.so*
+   obj:/usr/lib/libcuda.so*
+   fun:__cudart525
+   fun:__cudart1354
+   fun:__pthread_once_slow
+   fun:__cudart1635
+   fun:__cudart523
+   fun:cudaMallocManaged
+   fun:_Z17cudaMallocManagedIP6vqint3E9cudaErrorPPT_mj
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   obj:/usr/lib/libcuda.so.520.56.06
+   obj:/usr/lib/libcuda.so.520.56.06
+   obj:/usr/lib/libcuda.so.520.56.06
+   fun:__cudart525
+   fun:__cudart1354
+   fun:__pthread_once_slow
+   fun:__cudart1635
+   fun:__cudart523
+   fun:cudaMallocManaged
+   fun:_Z17cudaMallocManagedIP6vqint3E9cudaErrorPPT_mj
+   fun:main
+}
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   obj:/usr/lib/libcuda.so.520.56.06
+   obj:/usr/lib/libcuda.so.520.56.06
+   obj:/usr/lib/libcuda.so.520.56.06
+   obj:/usr/lib/libcuda.so.520.56.06
+   obj:/usr/lib/libcuda.so.520.56.06
+   fun:__cudart525
+   fun:__cudart1354
+   fun:__pthread_once_slow
+   fun:__cudart1635
+   fun:__cudart523
+   fun:cudaMallocManaged
+}
