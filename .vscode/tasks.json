@@ -1,0 +1,28 @@
+{
+	// See https://go.microsoft.com/fwlink/?LinkId=733558 
+	// for the documentation about the tasks.json format
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "cuda build",
+			"command": "/opt/cuda/bin/nvcc",
+			"args": [
+				"-g",
+				"${file}",
+				"-o",
+				"${fileDirname}/${fileBasenameNoExtension}",
+				"-Xcompiler", "-rdynamic", "-lineinfo", 
+				"-I /home/campus/code/NVIDIA/cuda-testing/Common"
+			],
+			"options": {
+				"cwd": "/opt/cuda/bin"
+			},
+			"problemMatcher": [
+				"$nvcc"
+			],
+			"group": "build",
+			"dependsOrder": "sequence"
+		}
+	]
+}
