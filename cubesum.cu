@@ -328,7 +328,7 @@ int main(int argc, char **argv){
 		resultstr=NULL;
 		//EOF wres
 
-		out_result_file << "a: "+ui128tos( tasks*(ti+1) )+"\n";
+		out_result_file << "a: "+ui128tos( tasks*(ti+1) )+"\n" << flush;
 
 		lastsolve=tasks*(ti+1);
 		if(threads_active==0){
@@ -364,8 +364,10 @@ int main(int argc, char **argv){
 
 	/*CLOCK*/d_time = (float)(clock()-st_time)/1000000;
 	/*CLOCK*/cout << "#" << d_time << " s\n";
-	/*CLOCK*/cout << "#" << (targ-start)*(targ-start)/7/1000000000/(long double)d_time << " Bil iter/s\n"; //appoximation
-
+	if(threads_active){
+		/*CLOCK*/cout << "#" << (targ-start)*(targ-start)/7/1000000000/(long double)d_time << " Bil iter/s\n"; //appoximation
+	}
+	
 	return 0;
 }
 // nvprof ./cubesum
