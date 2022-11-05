@@ -61,6 +61,7 @@
 		"shared_mutex": "cpp",
 		"stop_token": "cpp",
 		"thread": "cpp",
-		"chrono": "cpp"
+		"chrono": "cpp",
+		"valarray": "cpp"
 	}
 }
