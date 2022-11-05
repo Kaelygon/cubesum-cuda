@@ -17,43 +17,81 @@ using namespace std;
 	#include <helper_cuda.h> 
 #endif
 
+__constant__ bool force_quit;
+
+//Use builtin cbrt
+#define USE_BI_CBRT 1
 // Kernel function, (for any natural a,b a>b tdtarg3=a^3+b^3+c^3 find c by quadratic convergence)
+#if USE_BI_CBRT
 __global__
-void quadCverg(__uint128_t n, __uint128_t tdtarg3, __uint128_t tdtarg, __uint128_t aofs, vqint3 **result ){
-	__uint128_t index = blockIdx.x * blockDim.x + threadIdx.x;
+void quadCverg(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ){
+	__uint64_t index = blockIdx.x * blockDim.x + threadIdx.x;
 
-	__uint128_t stride = blockDim.x * gridDim.x;
+	__uint64_t stride = blockDim.x * gridDim.x;
 
-	__uint128_t a,b,c;
-	__uint128_t ai3,ctarg;
+	__uint64_t a,b,c;
+	__uint128_t bc3,ctarg;
+	
+	//search a,b. Index starts from 1
+	for (a = index+aofs+1; a<n+aofs+1; a += stride){
+		int inc=0;
+		bc3=tdtarg3-(__uint128_t)a*a*a; //b^3+c^3
+
+		c=tdtarg-1;
+		for (b = a+1; b<c; b++) {
+			ctarg=bc3-(__uint128_t)b*b*b; //c^3
+
+			c=__builtin_cbrt((double)ctarg);
+
+			//save or print result
+			((__uint128_t)c*c*c==ctarg) ? result[inc++][a-aofs-1]=vdint3{a,b,c} : vdint3() ;
+
+			#if DEBUG_DIGS==1
+				vdint3{a,b,c}.printvec();
+			#endif
+		}
+	}
+}
+#else
+__global__
+void quadCverg(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ){
+	__uint64_t index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	__uint64_t stride = blockDim.x * gridDim.x;
+
+	__uint64_t a,b,c;
+	__uint128_t ai3,bc3,ctarg;
 	__uint128_t c0=tdtarg-1; //c0 value is reused in each loop of b
 	
 	//search a,b. Index starts from 1
 	for (a = index+aofs+1; a<n+aofs; a += stride){
 		int inc=0;
-		ai3=a*a*a;
+		ai3=(__uint128_t)a*a*a;
+		bc3=tdtarg3-ai3; //b^3+c^3
 
 		c=tdtarg-1;
 		c0=c;
 		for (b = a+1; b<c; b++) {
-			ctarg=tdtarg3-ai3-b*b*b; //ctarg==c*c*c
+			ctarg=bc3-(__uint128_t)b*b*b; //c^3
 
 			do{ //quadratic iterations c = ctarg-(c^3-ctarg)/derivative(c^3-ctarg,c)
 				c = c0;
-				c0 = (3*c + ctarg/(c*c))/4;
+				c0 = ((__uint128_t)3*c + ctarg/((__uint128_t)c*c))/4;
 			}while (c0 < c);
-				
+
 			//save or print result
-			(c*c*c==ctarg) ? result[inc++][a-aofs-1]=uqint3{a,b,c} : vqint3() ;
+			((__uint128_t)c*c*c==ctarg) ? result[inc++][a-aofs-1]=vdint3{a,b,c} : vdint3() ;
 
 			#if DEBUG_DIGS==1
-				vqint3{a,b,c}.printvec();
+				vdint3{a,b,c}.printvec();
 			#endif
 		}
 	}
 }
 
-void searchResults(const int tdid, const int tdcount, const int rpt, __uint128_t n, const string tfil, vqint3 **result, char *resultstr, int *tdfound){
+#endif
+
+void searchResults(const int tdid, const int tdcount, const int rpt, __uint128_t n, const string tfil, vdint3 **result, char *resultstr, int *tdfound){
 	string tmpstr="";
 	for( __uint128_t k=tdid; k<n; k+=tdcount ){
 		if(result[0][k].x==0){continue;}
@@ -61,7 +99,7 @@ void searchResults(const int tdid, const int tdcount, const int rpt, __uint128_t
 			if(result[j][k].x==0){continue;}
 			tmpstr+= result[j][k].stringvec()+"\n";
 			*tdfound=*tdfound+1;
-			result[j][k]=vqint3(); //reset value
+			result[j][k]=vdint3(); //reset value
 		}
 	}
 	strcpy(resultstr,tmpstr.c_str());
@@ -81,6 +119,12 @@ void bgtasks(void)
 			threads_active=0;
 		}
 	}
+	getline(cin, input);
+	if ( input=="q" || input=="quit" )
+	{
+		std::cout << "#Forced to quit\n";
+		exit(-1);
+	}
 	return;
 }
 
@@ -90,16 +134,16 @@ int main(int argc, char **argv){
 	//BOF config
 	
 	int tc=1; //thread count
-	__uint128_t targ = 131071;
-	__uint128_t update_rate = targ; //gpu workload size before going back to host, tasksize=targ for best performance, but no logging of progress
+	__uint64_t targ = 131071;
+	__uint64_t update_rate = targ; //gpu workload size before going back to host, tasksize=targ for best performance, but no logging of progress
 	int maxrpb=2; //how many results with same A value can be stored. I have only found values which have two solutions with same A, e.g. targ= 189(odd), 256(even), ... 6959(prime)
-	__uint128_t start = 0; //A offset
+	__uint64_t start = 0; //A offset
 
 	string work_directory = "./";
 	string results_file = "results.txt";
 	string config = work_directory+"config.cfg";	//config file
 	string progress_file = work_directory+"lastSolve.txt";
-	__uint128_t maxvram=1*1024*1024*1024;
+	__uint64_t maxvram=1*1024*1024*1024;
 	bool clear_file=0;
 	
 	if( argc>1 ){
@@ -225,20 +269,20 @@ int main(int argc, char **argv){
 	thread bgthread;
 	bgthread = thread(bgtasks);
 
-	__uint128_t targ3 = targ*targ*targ;
+	__uint128_t targ3 = (__uint128_t)targ*targ*targ;
 
-	__uint128_t tasks=targ*(__float128)0.693361274350634659846548402128973976+1; //max A = t * 3^(2/3)/3
-	__uint128_t taskblocks;
+	__uint64_t tasks=targ*(__float128)0.693361274350634659846548402128973976+1; //max A = t * 3^(2/3)/3
+	__uint64_t taskblocks;
 	if(tc>tasks){tc=tasks;} //limit max threads to tasks
 
 	//calculate vram. if max is exceeded: recalc
-	__uint64_t arrx = maxrpb*sizeof(vqint3*);
-	__uint64_t arry = maxrpb*tasks*sizeof(vqint3);
+	__uint64_t arrx = maxrpb*sizeof(vdint3*);
+	__uint64_t arry = maxrpb*tasks*sizeof(vdint3);
 	__uint64_t totalloc = arrx + arry;
 	if( totalloc > maxvram ){
 		taskblocks=totalloc/maxvram+1;
 		tasks=(tasks-1)/taskblocks+1;
-		arry = maxrpb*tasks*sizeof(vqint3);
+		arry = maxrpb*tasks*sizeof(vdint3);
 		totalloc = arrx + arry;
 		cout << "New update rate due to vram limit: " << totalloc << "\n";
 	}else{
@@ -247,7 +291,7 @@ int main(int argc, char **argv){
 	}
 	cout << "#Allocated: " << totalloc/1024 << " KiB\n";
 
-	vqint3 **result; //shared with host and device
+	vdint3 **result; //shared with host and device
 
 	#if DEBUG_KAEL==1
 		checkCudaErrors( cudaMallocManaged( &result, arrx ) );
@@ -262,17 +306,17 @@ int main(int argc, char **argv){
 	#endif
 
 	__uint64_t foundsum=0;
-	__uint128_t lastsolve=start;
+	__uint64_t lastsolve=start;
 
 	ofstream out_result_file;
 	out_result_file.open(work_directory+results_file, ios::out | ios::app);
 
 	//splitting up gpu progress
-	for(__uint128_t ti=start/tasks;ti<taskblocks;ti++){
+	for(__uint64_t ti=start/tasks;ti<taskblocks;ti++){
 
-		__uint128_t blockSize = 1024;
+		__uint64_t blockSize = 1024;
 		if(blockSize>tasks){blockSize=tasks/32*32+32;}	//prevent initializing beyond tasks, int truncate 32s
-		__uint128_t numBlocks = (tasks-1) / blockSize + 1;
+		__uint64_t numBlocks = (tasks-1) / blockSize + 1;
 
 		//GPU
 		quadCverg<<<numBlocks,blockSize>>>(
@@ -318,6 +362,7 @@ int main(int argc, char **argv){
 			foundsum+=tdfound[tid];
 			
 			out_result_file << resultstr[tid];
+			cout << resultstr[tid];
 
 			free(resultstr[tid]);
 		}
@@ -328,7 +373,8 @@ int main(int argc, char **argv){
 		resultstr=NULL;
 		//EOF wres
 
-		out_result_file << "a: "+ui128tos( tasks*(ti+1) )+"\n" << flush;
+		out_result_file << "#a: "+ui128tos( tasks*(ti+1) )+"\n" << flush;
+		cout << "#a: "+ui128tos( tasks*(ti+1) )+"\n" << flush;
 
 		lastsolve=tasks*(ti+1);
 		if(threads_active==0){

@@ -80,3 +80,32 @@ struct vqint3
 	}
 
 };
+
+//unsigned double (precision) integer [3]
+struct udint3
+{
+    __uint64_t x, y, z;
+};
+struct vdint3
+{
+    __uint64_t x, y, z;
+
+    __host__ __device__ constexpr vdint3(__uint64_t qx = 0, __uint64_t qy = 0, __uint64_t qz = 0) : x(qx), y(qy), z(qz) {}
+    __host__ __device__ constexpr vdint3(uqint3 q) : x(q.x), y(q.y), z(q.z) {}
+    __host__ __device__ inline void printvec() {
+		printf(
+			"%lld^3 + %lld^3 + %lld^3\n",
+			(unsigned long long)(x & 0xFFFFFFFFFFFFFFFF),
+			(unsigned long long)(y & 0xFFFFFFFFFFFFFFFF),
+			(unsigned long long)(z & 0xFFFFFFFFFFFFFFFF)
+		);
+	}
+    __host__ string stringvec() { //max 134 char
+		return
+			ui128tos(x) + "^3" + " + " +
+			ui128tos(y) + "^3" + " + " +
+			ui128tos(z) + "^3" 
+		;
+	}
+
+};
