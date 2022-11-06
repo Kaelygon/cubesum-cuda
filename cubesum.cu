@@ -27,9 +27,9 @@ void nmcbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t ao
 
 	__uint64_t a,b,c;
 	__uint128_t ai3,bc3,ctarg;
-	__uint128_t c0=tdtarg-1; //c0 value is reused in each loop of b
+	__uint128_t c0=tdtarg-1;
 	//search a,b. Index starts from 1
-	for (a = index+aofs+1; a<n+aofs+1; a += stride){
+	for (a = index+aofs+1; a<n+1; a += stride){
 		int inc=0;
 		ai3=(__uint128_t)a*a*a;
 		bc3=tdtarg3-ai3; //b^3+c^3
@@ -40,7 +40,8 @@ void nmcbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t ao
 		ctarg=bc3-ai3;
 		do{ 
 			c = c0;
-			c0 = ((__uint128_t)3*c + ctarg/((__uint128_t)c*c))/4;
+			c0 = ((__uint128_t)3*c + ctarg/((__uint128_t)c*c))/4; //newton's method
+//			c0 = ((3*ctarg)/((2*c*c*c+ctarg))-1)/(2*c)+c*c*c-ctarg; //halley's steps
 		}while (c0 < c);
 		
 		for (b = a+1; b<c; b++) {
@@ -51,7 +52,6 @@ void nmcbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t ao
 
 			//if ctarg^(1/3) has integer soltion
 			((__uint128_t)c*c*c==ctarg) ? result[inc++][a-aofs-1]=vdint3{a,b,c} : vdint3() ;
-
 			#if DEBUG_DIGS==1
 				vdint3{a,b,c}.printvec();
 			#endif
@@ -285,7 +285,7 @@ int main(int argc, char **argv){
 
 	__uint128_t targ3 = (__uint128_t)targ*targ*targ;
 
-	__uint64_t tasks=targ*(__float128)0.693361274350634659846548402128973976+1; //max A = t * 3^(2/3)/3
+	__uint64_t tasks=(targ)*(__float128)0.693361274350634659846548402128973976+1; //max A = t * 3^(2/3)/3
 	__uint64_t taskblocks;
 	if(tc>tasks){tc=tasks;} //limit max threads to tasks
 
@@ -326,18 +326,18 @@ int main(int argc, char **argv){
 	out_result_file.open(work_directory+results_file, ios::out | ios::app);
 
 	//splitting up gpu progress
-	for(__uint64_t ti=start/tasks;ti<taskblocks;ti++){
+	for(__uint64_t ti=0;ti<taskblocks;ti++){
 
 		__uint64_t blockSize = 1024;
-		if(blockSize>tasks){blockSize=tasks/32*32+32;}	//prevent initializing beyond tasks, int truncate 32s
-		__uint64_t numBlocks = (tasks-1) / blockSize + 1;
+		if(blockSize>tasks){blockSize=(tasks)/32*32+32;}	//prevent initializing beyond tasks, int truncate 32s
+		__uint64_t numBlocks = (tasks-start-tasks*ti-1) / blockSize + 1;
 
 		//GPU
 		algoarr[algo]<<<numBlocks,blockSize>>>(
 			tasks, 
 			targ3, 
 			targ, 
-			tasks*ti,
+			start+tasks*ti,
 			result
 		);
 		
@@ -425,7 +425,8 @@ int main(int argc, char **argv){
 	/*CLOCK*/cout << "#" << d_time << " s\n";
 	
 	{//approx iter/s scope
-		long double iters = (targ-start)*(targ-start)/9/(long double)d_time;
+		__int128_t aprx = tasks-start;
+		long double iters = aprx*aprx /4.5 /(long double)d_time;
 		string magsfx[5] = {""," Kilo"," Million"," Billion"," Giga"};
 		int mi=0;
 		while(iters>1000 && mi<5){
@@ -433,7 +434,7 @@ int main(int argc, char **argv){
 			mi++;
 		}
 		if(threads_active){
-			/*CLOCK*/cout << "#" << iters << magsfx[mi] << " iterations per second\n";
+			/*CLOCK*/cout << "#" << iters << magsfx[mi] << " C per second\n";
 		}
 	}
 	
