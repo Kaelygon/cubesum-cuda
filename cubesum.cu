@@ -157,8 +157,8 @@ int main(int argc, char **argv){
 		config = argv[1];
 	}
 
-	if(config!=""){
-		ifstream config_file (config);
+	ifstream config_file (config);
+	if(config_file.good()){
 		stringstream tmp;
 		tmp << config_file.rdbuf();
 		string config_string = tmp.str();
@@ -238,8 +238,10 @@ int main(int argc, char **argv){
 			}
 		}
 	}else{
-		printf("Config not found. Using defaults.");
+		printf("Config not found.\n");
+		exit(-1);
 	}
+	config_file.close();
 
 	if(clear_file==1){
 		ofstream resfil;
