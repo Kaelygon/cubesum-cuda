@@ -190,7 +190,8 @@ int main(int argc, char **argv){
 					tc=stol(value); 
 					if(tc==0){tc=1;}
 				}else if(	word=="start" ){
-					start=stol(value); 
+					start=stol(value);
+					if(start!=0){start-=1;} //search starts from start+1
 				}else if(	word=="target" ){
 					targ=stol(value); 
 					if(targ<=0){targ=1;}
@@ -386,10 +387,10 @@ int main(int argc, char **argv){
 		resultstr=NULL;
 		//EOF wres
 
-		out_result_file << "#a: "+ui128tos( tasks*(ti+1) )+"\n" << flush;
-		cout << "#a: "+ui128tos( tasks*(ti+1) )+"\n" << flush;
+		out_result_file << "#a: "+ui128tos( tasks*(ti+1)+1 )+"\n" << flush;
+		cout << "#a: "+ui128tos( tasks*(ti+1)+1 )+"\n" << flush;
 
-		lastsolve=tasks*(ti+1);
+		lastsolve=tasks*(ti+1)+1;
 		if(threads_active==0){
 			break;
 		}
