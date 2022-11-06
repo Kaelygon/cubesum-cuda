@@ -13,7 +13,7 @@
 				"-o",
 				"${fileDirname}/${fileBasenameNoExtension}",
 				"-Xcompiler", "-rdynamic", "-lineinfo",
-				"-I /home/campus/code/NVIDIA/cuda-testing/Common"
+				"-I\"${fileDirname}/Common\""
 			],
 			"options": {
 				"cwd": "/opt/cuda/bin"

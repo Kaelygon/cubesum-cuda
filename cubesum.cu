@@ -17,14 +17,51 @@ using namespace std;
 	#include <helper_cuda.h> 
 #endif
 
-__constant__ bool force_quit;
-
-//Use builtin cbrt
-#define USE_BI_CBRT 1
-// Kernel function, (for any natural a,b a>b tdtarg3=a^3+b^3+c^3 find c by quadratic convergence)
-#if USE_BI_CBRT
+//KERNEL FUNCTIONS
+//(for any natural a,b a>b tdtarg3=a^3+b^3+c^3 find c by quadratic convergence)
 __global__
-void quadCverg(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ){
+void nmcbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ){
+	__uint64_t index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	__uint64_t stride = blockDim.x * gridDim.x;
+
+	__uint64_t a,b,c;
+	__uint128_t ai3,bc3,ctarg;
+	__uint128_t c0=tdtarg-1; //c0 value is reused in each loop of b
+	//search a,b. Index starts from 1
+	for (a = index+aofs+1; a<n+aofs+1; a += stride){
+		int inc=0;
+		ai3=(__uint128_t)a*a*a;
+		bc3=tdtarg3-ai3; //b^3+c^3
+
+		c0=tdtarg-1;
+
+		//quadratic iterations c for (a^3+(a-1)^3+c^3)^(1/3)
+		ctarg=bc3-ai3;
+		do{ 
+			c = c0;
+			c0 = ((__uint128_t)3*c + ctarg/((__uint128_t)c*c))/4;
+		}while (c0 < c);
+		
+		for (b = a+1; b<c; b++) {
+			ctarg=bc3-(__uint128_t)b*b*b; //c^3
+
+			//only one newton's method pass is required for each b++.
+			c = ((__uint128_t)3*c + ctarg/((__uint128_t)c*c))/4;
+
+			//if ctarg^(1/3) has integer soltion
+			((__uint128_t)c*c*c==ctarg) ? result[inc++][a-aofs-1]=vdint3{a,b,c} : vdint3() ;
+
+			#if DEBUG_DIGS==1
+				vdint3{a,b,c}.printvec();
+			#endif
+		}
+	}
+}
+
+//use builtin cbrt 
+__global__
+void bicbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ){
 	__uint64_t index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	__uint64_t stride = blockDim.x * gridDim.x;
@@ -43,43 +80,7 @@ void quadCverg(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t
 
 			c=__builtin_cbrt((double)ctarg);
 
-			//save or print result
-			((__uint128_t)c*c*c==ctarg) ? result[inc++][a-aofs-1]=vdint3{a,b,c} : vdint3() ;
-
-			#if DEBUG_DIGS==1
-				vdint3{a,b,c}.printvec();
-			#endif
-		}
-	}
-}
-#else
-__global__
-void quadCverg(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ){
-	__uint64_t index = blockIdx.x * blockDim.x + threadIdx.x;
-
-	__uint64_t stride = blockDim.x * gridDim.x;
-
-	__uint64_t a,b,c;
-	__uint128_t ai3,bc3,ctarg;
-	__uint128_t c0=tdtarg-1; //c0 value is reused in each loop of b
-	
-	//search a,b. Index starts from 1
-	for (a = index+aofs+1; a<n+aofs; a += stride){
-		int inc=0;
-		ai3=(__uint128_t)a*a*a;
-		bc3=tdtarg3-ai3; //b^3+c^3
-
-		c=tdtarg-1;
-		c0=c;
-		for (b = a+1; b<c; b++) {
-			ctarg=bc3-(__uint128_t)b*b*b; //c^3
-
-			do{ //quadratic iterations c = ctarg-(c^3-ctarg)/derivative(c^3-ctarg,c)
-				c = c0;
-				c0 = ((__uint128_t)3*c + ctarg/((__uint128_t)c*c))/4;
-			}while (c0 < c);
-
-			//save or print result
+			//if ctarg^(1/3) has integer soltion
 			((__uint128_t)c*c*c==ctarg) ? result[inc++][a-aofs-1]=vdint3{a,b,c} : vdint3() ;
 
 			#if DEBUG_DIGS==1
@@ -89,7 +90,11 @@ void quadCverg(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t
 	}
 }
 
-#endif
+//array of algorithm functions. It's like the entire internet hasn't heard about these
+static void  (*algoarr[2])(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ) 
+	= {nmcbrt, bicbrt};
+
+//EOF KERNEL FUNCTIONS
 
 void searchResults(const int tdid, const int tdcount, const int rpt, __uint128_t n, const string tfil, vdint3 **result, char *resultstr, int *tdfound){
 	string tmpstr="";
@@ -133,10 +138,10 @@ int main(int argc, char **argv){
 	
 	//BOF config
 	
-	int tc=1; //thread count
+	uint tc=1; //thread count
 	__uint64_t targ = 131071;
 	__uint64_t update_rate = targ; //gpu workload size before going back to host, tasksize=targ for best performance, but no logging of progress
-	int maxrpb=2; //how many results with same A value can be stored. I have only found values which have two solutions with same A, e.g. targ= 189(odd), 256(even), ... 6959(prime)
+	uint maxrpb=2; //how many results with same A value can be stored. I have only found values which have two solutions with same A, e.g. targ= 189(odd), 256(even), ... 6959(prime)
 	__uint64_t start = 0; //A offset
 
 	string work_directory = "./";
@@ -144,6 +149,8 @@ int main(int argc, char **argv){
 	string config = work_directory+"config.cfg";	//config file
 	string progress_file = work_directory+"lastSolve.txt";
 	__uint64_t maxvram=1*1024*1024*1024;
+	uint algo=0;
+
 	bool clear_file=0;
 	
 	if( argc>1 ){
@@ -223,11 +230,15 @@ int main(int argc, char **argv){
 					}else{
 						maxvram=stol(value);
 					}
+				}else if(	word=="algorithm" ){
+					algo=stol(value);
 				}
 				cout << "#" << word << "=" << value << "\n";
 				word="";
 			}
 		}
+	}else{
+		printf("Config not found. Using defaults.");
 	}
 
 	if(clear_file==1){
@@ -284,7 +295,7 @@ int main(int argc, char **argv){
 		tasks=(tasks-1)/taskblocks+1;
 		arry = maxrpb*tasks*sizeof(vdint3);
 		totalloc = arrx + arry;
-		cout << "New update rate due to vram limit: " << totalloc << "\n";
+		cout << "New update rate due to vram limit: " << totalloc << " taskblocks: " << taskblocks << "\n";
 	}else{
 		taskblocks=(tasks-1)/update_rate+1;
 		tasks=(tasks-1)/taskblocks+1;
@@ -319,11 +330,11 @@ int main(int argc, char **argv){
 		__uint64_t numBlocks = (tasks-1) / blockSize + 1;
 
 		//GPU
-		quadCverg<<<numBlocks,blockSize>>>(
+		algoarr[algo]<<<numBlocks,blockSize>>>(
 			tasks, 
 			targ3, 
 			targ, 
-			start+tasks*ti,
+			tasks*ti,
 			result
 		);
 		
@@ -394,7 +405,7 @@ int main(int argc, char **argv){
 		}
 		cudaFree(result);	
 	#endif
-	cudaDeviceReset();
+//	cudaDeviceReset();
 
 	ofstream out_progress_file;
 	out_progress_file.open(work_directory+progress_file, ios::out);
@@ -405,13 +416,22 @@ int main(int argc, char **argv){
 	printf("#Last solved: %lld\n",(__uint64_t)lastsolve);
 	printf("#Found: %d\n",foundsum);
 
-
 	bgthread.detach(); //will not free memory
 
 	/*CLOCK*/d_time = (float)(clock()-st_time)/1000000;
 	/*CLOCK*/cout << "#" << d_time << " s\n";
-	if(threads_active){
-		/*CLOCK*/cout << "#" << (targ-start)*(targ-start)/7/1000000000/(long double)d_time << " Bil iter/s\n"; //appoximation
+	
+	{//approx iter/s scope
+		long double iters = (targ-start)*(targ-start)/9/(long double)d_time;
+		string magsfx[5] = {""," Kilo"," Million"," Billion"," Giga"};
+		int mi=0;
+		while(iters>1000 && mi<5){
+			iters/=1000;
+			mi++;
+		}
+		if(threads_active){
+			/*CLOCK*/cout << "#" << iters << magsfx[mi] << " iterations per second\n";
+		}
 	}
 	
 	return 0;
