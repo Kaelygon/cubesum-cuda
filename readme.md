@@ -42,3 +42,5 @@ Use builtin cbrt (64-bit double)
 
  ALGO 2
  Search one solution for each number in sequence A066890, up to [target]. I recommend using < 5000 [target] as this is very slow.
+ yanky way to print results: 
+ 	cat ./datacs/results.txt | grep -v "#" | xargs -i sh -c 'echo -n "{} = " && calc "({})^(1/3)"'

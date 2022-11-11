@@ -101,9 +101,9 @@ void allcbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t a
 	__uint128_t c0=tdtarg-1;
 
 	__uint128_t cube;
-	for(cbi=index+aofs;cbi<=tdtarg+aofs;cbi+=stride){ //in this case, cbi is the target  
+	for(cbi=index+aofs;cbi<=n+aofs;cbi+=stride){ //in this case, cbi is the target  
 		cube=cbi*cbi*cbi;
-		for (a = 1; a<cbi+1; a += 1){
+		for (a = 1; a<cbi*0.69336+1; a += 1){
 			int inc=0;
 			ai3=(__uint128_t)a*a*a;
 			if(cube<ai3){break;}
@@ -126,9 +126,13 @@ void allcbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t a
 				//only one newton's method pass is required for each b++.
 				c = ((__uint128_t)3*c + ctarg/((__uint128_t)c*c))/4;
 
+				#if DEBUG_DIGS==0
+					vdint3{a,b,c}.printvec();
+				#endif
+
 				//if ctarg^(1/3) has integer soltion
 				if((__uint128_t)c*c*c==ctarg){
-					result[inc++][a-aofs-1]=vdint3{a,b,c};
+					result[inc++][a]=vdint3{a,b,c};
 					goto iend;
 				}
 			}
@@ -334,7 +338,7 @@ int main(int argc, char **argv){
 
 	__uint64_t tasks = 
 	(algo==2) ? 
-		targ-start	
+		targ-start 	
 		:
 		(targ)*(__float128)0.693361274350634659846548402128973976+1-start //max A = t * 3^(2/3)/3
 	;
@@ -344,7 +348,8 @@ int main(int argc, char **argv){
 
 	//calculate vram. if max is exceeded: recalc
 	__uint64_t arrx = maxrpb*sizeof(vdint3*);
-	__uint64_t arry = maxrpb*tasks*sizeof(vdint3);
+	__uint64_t arry = maxrpb*tasks*sizeof(vdint3);	// algo==2 has same allocation size as there's cbrt(targ) perfect cubes up to targ
+	
 	__uint64_t totalloc = arrx + arry;
 	if( totalloc > maxvram ){
 		taskblocks=totalloc/maxvram+1;
