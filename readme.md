@@ -17,8 +17,9 @@ If no argument is given, default file is ./config.cfg, if file or some elements 
 	progress_file=#lastSolve.txt	# (string) progress file, if any
 	clear_file=true			# (bool) clear files at start?
 	max_vram=6G			# (__uint64_t) max allocated video memory. Suffixes ""=Bytes, "K"=KiB, "M"=MiB, "G"=GiB 
-	results_per_block=2		# (uint) maximum stored results with sane A per block
-	algorithm=1			# (uint) 0 = (Newton's method) 1 = (__builtin_cbrt)
+	results_per_block=2		# (uint) maximum stored results with sane A per block. 
+							#Program will give an error "an illegal memory access was encountered" incase this is exceeded 
+	algorithm=1			# (uint) 0 = (Newton's method) 1 = (__builtin_cbrt) 2 = (A023042)
 	?				# end of file
 
 Elements order don't matter in config file. Comment lines with '#'
@@ -38,3 +39,6 @@ Use builtin cbrt (64-bit double)
   Fast but precision is limited to (2^52-1)^(1/3) = 208063 
   C higher than this may not compute properly in some special cases
   Cuda/gcc does not support float128 cbrt as of now.
+
+ ALGO 2
+ Search one solution for each number in sequence A066890, up to [target]. I recommend using < 5000 [target] as this is very slow.

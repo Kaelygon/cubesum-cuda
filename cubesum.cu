@@ -29,7 +29,7 @@ void nmcbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t ao
 	__uint128_t ai3,bc3,ctarg;
 	__uint128_t c0=tdtarg-1;
 	//search a,b. Index starts from 1
-	for (a = index+aofs+1; a<n+1; a += stride){
+	for (a = index+aofs+1; a<n+aofs+1; a += stride){
 		int inc=0;
 		ai3=(__uint128_t)a*a*a;
 		bc3=tdtarg3-ai3; //b^3+c^3
@@ -89,16 +89,63 @@ void bicbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t ao
 		}
 	}
 }
+//search every number of sequence A023042 up to tdtarg
+__global__
+void allcbrt(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ){
+	__uint64_t index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	__uint64_t stride = blockDim.x * gridDim.x;
+
+	__uint64_t a,b,c,cbi;
+	__uint128_t ai3,bi3,bc3,ctarg;
+	__uint128_t c0=tdtarg-1;
+
+	__uint128_t cube;
+	for(cbi=index+aofs;cbi<=tdtarg+aofs;cbi+=stride){ //in this case, cbi is the target  
+		cube=cbi*cbi*cbi;
+		for (a = 1; a<cbi+1; a += 1){
+			int inc=0;
+			ai3=(__uint128_t)a*a*a;
+			if(cube<ai3){break;}
+			bc3=cube-ai3; //b^3+c^3
+
+			c0=tdtarg-1;
+
+			//quadratic iterations c for (a^3+(a-1)^3+c^3)^(1/3)
+			ctarg=bc3-ai3;
+			do{ 
+				c = c0;
+				c0 = ((__uint128_t)3*c + ctarg/((__uint128_t)c*c))/4; //newton's method
+			}while (c0 < c);
+			
+			for (b = a+1; b<c; b++) {
+				bi3=b*b*b;
+				if(bc3<bi3){break;}
+				ctarg=bc3-(__uint128_t)bi3; //c^3
+
+				//only one newton's method pass is required for each b++.
+				c = ((__uint128_t)3*c + ctarg/((__uint128_t)c*c))/4;
+
+				//if ctarg^(1/3) has integer soltion
+				if((__uint128_t)c*c*c==ctarg){
+					result[inc++][a-aofs-1]=vdint3{a,b,c};
+					goto iend;
+				}
+			}
+		}
+		iend:;
+	};
+}
 
 //array of algorithm functions. It's like the entire internet hasn't heard about these
-static void  (*algoarr[2])(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ) 
-	= {nmcbrt, bicbrt};
+static void  (*algoarr[3])(__uint64_t n, __uint128_t tdtarg3, __uint64_t tdtarg, __uint128_t aofs, vdint3 **result ) 
+	= {nmcbrt, bicbrt, allcbrt};
 
 //EOF KERNEL FUNCTIONS
 
-void searchResults(const int tdid, const int tdcount, const int rpt, __uint128_t n, const string tfil, vdint3 **result, char *resultstr, int *tdfound){
+void searchResults(const int tdid, const int tdcount, const int rpt, __uint128_t tdtasks, const string tfil, vdint3 **result, char *resultstr, int *tdfound){
 	string tmpstr="";
-	for( __uint128_t k=tdid; k<n; k+=tdcount ){
+	for( __uint128_t k=tdid; k<tdtasks; k+=tdcount ){
 		if(result[0][k].x==0){continue;}
 		for(__uint128_t j=0;j<rpt;j++ ){
 			if(result[j][k].x==0){continue;}
@@ -285,7 +332,13 @@ int main(int argc, char **argv){
 
 	__uint128_t targ3 = (__uint128_t)targ*targ*targ;
 
-	__uint64_t tasks=(targ)*(__float128)0.693361274350634659846548402128973976+1; //max A = t * 3^(2/3)/3
+	__uint64_t tasks = 
+	(algo==2) ? 
+		targ-start	
+		:
+		(targ)*(__float128)0.693361274350634659846548402128973976+1-start //max A = t * 3^(2/3)/3
+	;
+
 	__uint64_t taskblocks;
 	if(tc>tasks){tc=tasks;} //limit max threads to tasks
 
@@ -329,8 +382,8 @@ int main(int argc, char **argv){
 	for(__uint64_t ti=0;ti<taskblocks;ti++){
 
 		__uint64_t blockSize = 1024;
-		if(blockSize>tasks){blockSize=(tasks)/32*32+32;}	//prevent initializing beyond tasks, int truncate 32s
-		__uint64_t numBlocks = (tasks-start-tasks*ti-1) / blockSize + 1;
+		if(blockSize>tasks){blockSize=tasks/32*32+32;}	//prevent initializing beyond tasks, int truncate 32s
+		__uint64_t numBlocks = ((tasks-1)/taskblocks) / blockSize + 1;
 
 		//GPU
 		algoarr[algo]<<<numBlocks,blockSize>>>(
@@ -348,13 +401,11 @@ int main(int argc, char **argv){
 			cudaDeviceSynchronize();
 		#endif
 
-
 		//THREADS search and write gpu results. wres
 		int *tdfound = (int*) calloc(tc, sizeof(int*));
 		char **resultstr = (char**) malloc(tc * sizeof(char*));		
 
 		thread *wres = new thread[tc];
-
 		for(uint tid=0;tid<tc;tid++ ){
 			resultstr[tid] = (char*) malloc( (maxrpb*tasks)/tc * sizeof(char)*(135+5));
 			wres[tid] = thread(
@@ -375,8 +426,8 @@ int main(int argc, char **argv){
 			wres[tid].join();
 			foundsum+=tdfound[tid];
 			
-			out_result_file << resultstr[tid];
-			cout << resultstr[tid];
+			out_result_file << (char*)resultstr[tid];
+			cout << (char*)resultstr[tid];
 
 			free(resultstr[tid]);
 		}
@@ -387,10 +438,11 @@ int main(int argc, char **argv){
 		resultstr=NULL;
 		//EOF wres
 
-		out_result_file << "#a: "+ui128tos( tasks*(ti+1)+1 )+"\n" << flush;
-		cout << "#a: "+ui128tos( tasks*(ti+1)+1 )+"\n" << flush;
+		__uint64_t curprog = start+tasks*(ti+1)+1; //current (progress of) A
+		out_result_file << "#a: "+ui128tos( curprog )+"\n" << flush;
+		cout << "#a: "+ui128tos( curprog )+"\n" << flush;
 
-		lastsolve=tasks*(ti+1)+1;
+		lastsolve=curprog;
 		if(threads_active==0){
 			break;
 		}
@@ -425,7 +477,7 @@ int main(int argc, char **argv){
 	/*CLOCK*/cout << "#" << d_time << " s\n";
 	
 	{//approx iter/s scope
-		__int128_t aprx = tasks-start;
+		__int128_t aprx = targ*0.69336-start-(targ*0.69336-lastsolve-2); // [checked A count] - start - ([not checked A count]) 
 		long double iters = aprx*aprx /4.5 /(long double)d_time;
 		string magsfx[5] = {""," Kilo"," Million"," Billion"," Giga"};
 		int mi=0;
@@ -433,7 +485,7 @@ int main(int argc, char **argv){
 			iters/=1000;
 			mi++;
 		}
-		if(threads_active){
+		if((algo==0 || algo==1)){
 			/*CLOCK*/cout << "#" << iters << magsfx[mi] << " C per second\n";
 		}
 	}
